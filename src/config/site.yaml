@@ -1,0 +1,5 @@
+---
+web:
+  title: Hello World
+  connection: 12345667
+  isWeb: false
