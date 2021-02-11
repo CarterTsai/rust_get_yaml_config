@@ -1,5 +1,8 @@
-use actix_web::{get, App, web, HttpServer, Responder, HttpRequest};
+use actix_web::{get, App, web, HttpServer, Responder, HttpRequest, HttpResponse, error, middleware};
+use actix_web::middleware::errhandlers::{ErrorHandlerResponse, ErrorHandlers};
 use std::collections::BTreeMap;
+use systemstat::{System, Platform, saturating_sub_bytes};
+use tera::Tera;
 
 #[get("/")]
 async fn index(req: HttpRequest) -> impl Responder {
@@ -25,6 +28,16 @@ async fn get_config(path: web::Path<(String)>) -> impl Responder {
         None => {format!("{:?}", "沒有這個設定變數名稱")}
     }
     
+}
+
+
+#[get("/get_memory")]
+async fn get_memory() -> impl Responder { 
+    let sys = System::new();
+    match sys.memory() {
+        Ok(mem) => format!("\nMemory: {} used / {} ({} bytes)", saturating_sub_bytes(mem.total, mem.free), mem.total, mem.total.as_u64()),
+        Err(x) => format!("\nMemory: error: {}", x)
+    }
 }
 
 fn get_value(arg: &serde_yaml::Value) -> String {
@@ -55,8 +68,19 @@ fn get_value(arg: &serde_yaml::Value) -> String {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    std::env::set_var("RUST_LOG", "actix_web=info");
+    env_logger::init();
+
     HttpServer::new(|| {
-        App::new().service(index).service(get_config)
+        let tera =
+            Tera::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/**/*")).unwrap();
+
+        App::new()
+        .data(tera)
+        .wrap(middleware::Logger::default()) // enable logger
+        .service(index)
+        .service(get_config)
+        .service(get_memory)
     })
     .bind("127.0.0.1:8080")?
     .run()
